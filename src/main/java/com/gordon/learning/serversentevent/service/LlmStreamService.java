@@ -92,6 +92,10 @@ public class LlmStreamService {
             // 3. 發送請求並設定串流監聽器
             EventSource.Factory factory = EventSources.createFactory(client);
             factory.newEventSource(request, new EventSourceListener() {
+
+                // 新增一個 StringBuilder，用來收集完整的 LLM 回覆
+                private final StringBuilder fullResponseBuilder = new StringBuilder();
+
                 @Override
                 public void onOpen(@NonNull EventSource eventSource, @NonNull Response response) {
                     try {
@@ -105,11 +109,39 @@ public class LlmStreamService {
                 public void onEvent(@NonNull EventSource eventSource, @Nullable String id, @Nullable String type, @NonNull String data) {
                     if (data.equals("[DONE]")) {
                         try {
+
+                            String fullText = fullResponseBuilder.toString();
+
+                            // 簡易萃取邏輯：抓取 Markdown 中的 java 程式碼區塊
+                            int startIndex = fullText.indexOf("```java");
+                            int endIndex = fullText.indexOf("```");
+
+                            if (startIndex != -1 && endIndex > startIndex) {
+                                // 將純程式碼提取出來
+                                String javaCode =  fullText.substring(startIndex + 7, endIndex);
+
+                                // 建立要傳給VS Code的執行指令(Action)
+                                ObjectNode actionNode = objectMapper.createObjectNode();
+                                actionNode.put("action", "create_file");
+
+                                // 實務層面看可以透過LLM或JavaParser動態決定檔名，此處就先固定檔名
+                                actionNode.put("fileName", "CodeGuardianGeneratedTest.java");
+                                actionNode.put("content", javaCode);
+
+                                // 發送自訂的 action 事件
+                                emitter.send(SseEmitter.event().name("action").data(actionNode.toString()));
+
+                            }
+
                             emitter.send(SseEmitter.event().name("done").data("[DONE]"));
                             emitter.complete();
+
                         } catch (IOException e) {}
                         return;
                     }
+
+                    // 處理串流中的文字，同步紀錄到 StringBuilder中
+
 
                     try {
                         // 解析 OpenAI 格式的回傳值 {"choices": [{"delta": {"content": "這"}}]}
@@ -118,10 +150,15 @@ public class LlmStreamService {
                         if (choices.isArray() && !choices.isEmpty()) {
                             JsonNode contentNode = choices.get(0).path("delta").path("content");
                             if (!contentNode.isMissingNode()) {
+
                                 String textChunk = contentNode.asString();
-                                // 將換行符號轉義，避免打斷 SSE 格式
-                                textChunk = textChunk.replace("\n", "\\n");
-                                emitter.send(SseEmitter.event().name("message").data(textChunk));
+
+                                // 收集文字
+                                fullResponseBuilder.append(textChunk);
+
+                                // 轉義換行並推送給 VS Code 介面
+                                String safeChunk = textChunk.replace("\n", "\\n");
+                                emitter.send(SseEmitter.event().name("message").data(safeChunk));
                             }
                         }
                     } catch (Exception e) {
