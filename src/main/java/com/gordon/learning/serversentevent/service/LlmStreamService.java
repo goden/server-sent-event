@@ -6,6 +6,7 @@ import okhttp3.sse.EventSourceListener;
 import okhttp3.sse.EventSources;
 import org.jspecify.annotations.NonNull;
 import org.jspecify.annotations.Nullable;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -32,6 +33,10 @@ public class LlmStreamService {
     private final OkHttpClient client;
     private final ObjectMapper objectMapper;
 
+    // 1. 注入我們剛剛寫好的 AST 服務
+    @Autowired
+    private JavaAsService javaAsService;
+
     public LlmStreamService() {
         this.client = new OkHttpClient.Builder()
                 .readTimeout(3, TimeUnit.MINUTES) // LLM 思考時間較長，拉長 Timeout
@@ -42,12 +47,18 @@ public class LlmStreamService {
     public void streamToClient(String userQuery, String codeContext, SseEmitter emitter) {
 
         try {
-            // 1. 構建 System Prompt (賦予 Agent 專家角色與銀行規範)
-            String systemPrompt = "你是一位精通 Java 8 與 Angular 的銀行資深 IT 架構師。" +
-                    "請針對使用者提供的程式碼與問題，給出最嚴謹的重構建議或自動化測試腳本。" +
-                    "必須符合企業級 Clean Code 原則。";
 
-            String userMessage = "問題：" + userQuery + "\n\n程式碼上下文：\n" + codeContext;
+            // 2. 在背景執行 JavaParser 語法樹分析
+            String astAnalysisResult =  javaAsService.analyzeStructure(codeContext);
+
+            // 3. 升級 System Prompt，迫使 AI 必須對齊後端分析出來的骨架
+            String systemPrompt = "你是一位精通 Java 8 與自動化測試的頂尖架構師。\n" +
+                    "後端系統已經為你解析了該檔案的精確 AST 結構如下：\n" +
+                    astAnalysisResult + "\n" +
+                    "請嚴格根據上方分析出的公開方法與異常聲明，為使用者規劃完整的 JUnit 5 測試案例。" +
+                    "請使用專業的繁體中文回答。";
+
+            String userMessage = "使用者具體提問：" + userQuery + "\n\n原始碼全文：\n" + codeContext;
 
             // 2. 構建 JSON Payload
             ObjectNode payload = objectMapper.createObjectNode();
