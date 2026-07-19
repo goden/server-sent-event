@@ -43,7 +43,8 @@ public class JavaAsService {
             });
             return sb.toString();
         } catch (Exception e) {
-            return "【】";
+            // 防呆降級機制：如果傳過來的不是合法的 Java 檔案（例如是 Angular 的 ts 檔），就溫和地跳過
+            return "【提示：非標準 Java 原始碼或語法有誤，已跳過 AST 深度解析】\n";
         }
     }
 }
