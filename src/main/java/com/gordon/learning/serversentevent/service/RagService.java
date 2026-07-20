@@ -18,11 +18,14 @@ public class RagService {
     public void initKnowledgeBase() {
         // 實務上，把這些檔案放在 src/main/resources/docs 底下
         // 為求實作快速，直接用字串模擬載入的本文內容
+
+        StringBuilder sb = new StringBuilder();
         knowledgeBase.put("JAVA_SECURITY",
-                "【後端資安規範】：\n" +
-                        "1. 所有的 Controller 方法必須加上 @RequiresPermissions 檢查權限。\n" +
-                        "2. 不允許使用字串拼接 SQL，必須使用 Prepared Statement 或 JPA。\n" +
-                        "3. 捕捉到 Exception 時，絕對不能使用 e.printStackTrace()，必須使用 logger.error()。");
+            sb.append("【後端資安規範】：").append("\n")
+                    .append( "1. 所有的 Controller 方法必須加上 @RequiresPermissions 檢查權限。").append("\n")
+                    .append("2. 不允許使用字串拼接 SQL，必須使用 Prepared Statement 或 JPA。" ).append("\n")
+                    .append("3. 捕捉到 Exception 時，絕對不能使用 e.printStackTrace()，必須使用 logger.error()。").append("\n").toString()
+                    );
 
         knowledgeBase.put("ANGULAR_21_UPGRADE",
                 "【前端 Angular 21 規範】：\n" +

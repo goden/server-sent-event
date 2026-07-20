@@ -44,6 +44,7 @@ public class LlmStreamService {
         this.objectMapper = new ObjectMapper();
     }
 
+    @Deprecated
     public void streamToClient(String userQuery, String codeContext, SseEmitter emitter) {
 
         try {

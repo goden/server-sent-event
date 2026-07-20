@@ -47,6 +47,7 @@ public class MultiAgentPipelineService {
             // 攔截機制：如果資安專家沒有給出「【安全】」的綠燈，直接退回，中斷管線
             if (!securityReport.contains("安全")) {
                 String warningMessage = "⚠️ **Security Agent 阻擋了此次提交**：\n\n" + securityReport;
+                emitter.send(SseEmitter.event().name("progress").data(warningMessage));
 
                 // 將換行符號轉義，以便透過 SSE 傳送
                 emitter.send(SseEmitter.event().name("message").data("**資安掃描未通過**：\\n" + securityReport.replace("\n", "\\n")));
