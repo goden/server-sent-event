@@ -7,7 +7,7 @@ import com.github.javaparser.ast.body.MethodDeclaration;
 import org.springframework.stereotype.Service;
 
 @Service
-public class JavaAsService {
+public class JavaAstService {
 
     public String analyzeStructure(String code) {
 

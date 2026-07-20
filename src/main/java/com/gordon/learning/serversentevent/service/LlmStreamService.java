@@ -35,7 +35,7 @@ public class LlmStreamService {
 
     // 1. 注入我們剛剛寫好的 AST 服務
     @Autowired
-    private JavaAsService javaAsService;
+    private JavaAstService javaAstService;
 
     public LlmStreamService() {
         this.client = new OkHttpClient.Builder()
@@ -49,7 +49,7 @@ public class LlmStreamService {
         try {
 
             // 2. 在背景執行 JavaParser 語法樹分析
-            String astAnalysisResult =  javaAsService.analyzeStructure(codeContext);
+            String astAnalysisResult =  javaAstService.analyzeStructure(codeContext);
 
             // 3. 升級 System Prompt，迫使 AI 必須對齊後端分析出來的骨架
             String systemPrompt = "你是一位精通 Java 8 與自動化測試的頂尖架構師。\n" +
@@ -136,7 +136,9 @@ public class LlmStreamService {
                             emitter.send(SseEmitter.event().name("done").data("[DONE]"));
                             emitter.complete();
 
-                        } catch (IOException e) {}
+                        } catch (IOException e) {
+                            System.err.println(e.getMessage());
+                        }
                         return;
                     }
 
@@ -169,14 +171,129 @@ public class LlmStreamService {
                 @Override
                 public void onFailure(@NonNull EventSource eventSource, @Nullable Throwable t, @Nullable Response response) {
                     try {
+                        assert t != null;
                         emitter.send(SseEmitter.event().name("message").data("\\n\\n❌ LLM 呼叫失敗: " + t.getMessage()));
                         emitter.completeWithError(t);
-                    } catch (IOException e) {}
+                    } catch (IOException e) {
+                        System.err.println(e.getMessage());
+                    }
                 }
             });
         } catch (Exception e) {
             emitter.completeWithError(e);
         }
 
+    }
+
+    /**
+     * 1. 同步呼叫 (Sync)：用於 Security Agent
+     * 阻斷執行緒，直到 LLM 完整回覆為止。
+     */
+    public String callLlmSync(String systemPrompt, String codeContext) throws IOException {
+        ObjectNode payload = objectMapper.createObjectNode();
+        payload.put("model", modelName);
+        payload.put("stream", false); // 關閉串流
+
+        ArrayNode messages = payload.putArray("messages");
+        messages.add(objectMapper.createObjectNode().put("role", "system").put("content", systemPrompt));
+        messages.add(objectMapper.createObjectNode().put("role", "user").put("content", codeContext));
+
+        RequestBody body = RequestBody.create(payload.toString(), MediaType.get("application/json; charset=utf-8"));
+        Request request = new Request.Builder()
+                .url(apiUrl)
+                .post(body)
+                .addHeader("Authorization", "Bearer " + apiKey)
+                .build();
+
+        // 執行同步請求 (execute 會卡住直到有回應)
+        try (Response response = client.newCall(request).execute()) {
+            if (!response.isSuccessful() || response.body() == null) {
+                throw new IOException("LLM 呼叫失敗: " + response);
+            }
+            // 解析回傳的整包 JSON
+            JsonNode rootNode = objectMapper.readTree(response.body().string());
+            return rootNode.path("choices").get(0).path("message").path("content").asString();
+        }
+    }
+
+    /**
+     * 2. 串流呼叫與動作萃取 (Stream & Action)：用於 QA Agent
+     * 使用 SSE 一字一字回傳，並在結束時擷取 Java 程式碼觸發建檔。
+     * 這其實就是我們上一堂課 LlmStreamService 的進化版。
+     */
+    public void callLlmStreamAndExtractAction(String systemPrompt, String codeContext, SseEmitter emitter) {
+        try {
+            ObjectNode payload = objectMapper.createObjectNode();
+            payload.put("model", modelName);
+            payload.put("stream", true); // 開啟串流
+
+            ArrayNode messages = payload.putArray("messages");
+            messages.add(objectMapper.createObjectNode().put("role", "system").put("content", systemPrompt));
+            messages.add(objectMapper.createObjectNode().put("role", "user").put("content", codeContext));
+
+            RequestBody body = RequestBody.create(payload.toString(), MediaType.get("application/json; charset=utf-8"));
+            Request request = new Request.Builder()
+                    .url(apiUrl)
+                    .post(body)
+                    .addHeader("Authorization", "Bearer " + apiKey)
+                    .addHeader("Accept", "text/event-stream")
+                    .build();
+
+            EventSource.Factory factory = EventSources.createFactory(client);
+            factory.newEventSource(request, new EventSourceListener() {
+                private final StringBuilder fullResponseBuilder = new StringBuilder();
+
+                @Override
+                public void onEvent(@NonNull EventSource eventSource, String id, String type, @NonNull String data) {
+                    if ("[DONE]".equals(data)) {
+                        try {
+                            String fullText = fullResponseBuilder.toString();
+                            int startIndex = fullText.indexOf("```java");
+                            int endIndex = fullText.lastIndexOf("```");
+
+                            // 擷取程式碼並觸發 VS Code 自動建檔 (Action)
+                            if (startIndex != -1 && endIndex > startIndex) {
+                                String javaCode = fullText.substring(startIndex + 7, endIndex).trim();
+                                ObjectNode actionNode = objectMapper.createObjectNode();
+                                actionNode.put("action", "create_file");
+                                actionNode.put("fileName", "CodeGuardianGeneratedTest.java");
+                                actionNode.put("content", javaCode);
+                                emitter.send(SseEmitter.event().name("action").data(actionNode.toString()));
+                            }
+
+                            emitter.send(SseEmitter.event().name("done").data("[DONE]"));
+                            emitter.complete();
+                        } catch (IOException e) {
+                            System.err.println(e.getMessage());
+                        }
+                        return;
+                    }
+
+                    // 處理文字串流
+                    try {
+                        JsonNode jsonNode = objectMapper.readTree(data);
+                        JsonNode contentNode = jsonNode.path("choices").get(0).path("delta").path("content");
+                        if (!contentNode.isMissingNode()) {
+                            String textChunk = contentNode.asString();
+                            fullResponseBuilder.append(textChunk);
+                            emitter.send(SseEmitter.event().name("message").data(textChunk.replace("\n", "\\n")));
+                        }
+                    } catch (Exception e) {
+                        System.err.println(e.getMessage());
+                    }
+                }
+
+                @Override
+                public void onFailure(@NonNull EventSource eventSource, Throwable t, Response response) {
+                    try {
+                        emitter.completeWithError(t);
+                    } catch (Exception e) {
+                        System.err.println(e.getMessage());
+                    }
+                }
+            });
+        } catch (Exception e) {
+            emitter.completeWithError(e);
+        }
     }
 }
