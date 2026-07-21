@@ -55,6 +55,16 @@
             <artifactId>javaparser-core</artifactId>
             <version>3.26.2</version> <!-- 支援 Java 8 的穩定高版本 -->
         </dependency>
+        <!-- Spring Boot 監控核心 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!-- 匯出至 Prometheus 格式 (供 Grafana 畫圖) -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
     </dependencies>
 
     <build>
