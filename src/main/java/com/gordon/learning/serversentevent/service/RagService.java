@@ -16,27 +16,26 @@ public class RagService {
      * 這樣每次 Agent 查詢時都不用重新讀取硬碟，速度極快。
      */
     public void initKnowledgeBase() {
+
         // 實務上，把這些檔案放在 src/main/resources/docs 底下
         // 為求實作快速，直接用字串模擬載入的本文內容
+        knowledgeBase.put("JAVA_SECURITY", """
+                【後端資安規範】：
+                1. 所有的 Controller 方法必須加上 @RequiresPermissions 檢查權限。
+                2. 不允許使用字串拼接 SQL，必須使用 Prepared Statement 或 JPA。
+                3. 捕捉到 Exception 時，絕對不能使用 e.printStackTrace()，必須使用 logger.error()。""");
 
-        StringBuilder sb = new StringBuilder();
-        knowledgeBase.put("JAVA_SECURITY",
-            sb.append("【後端資安規範】：").append("\n")
-                    .append( "1. 所有的 Controller 方法必須加上 @RequiresPermissions 檢查權限。").append("\n")
-                    .append("2. 不允許使用字串拼接 SQL，必須使用 Prepared Statement 或 JPA。" ).append("\n")
-                    .append("3. 捕捉到 Exception 時，絕對不能使用 e.printStackTrace()，必須使用 logger.error()。").append("\n").toString()
-                    );
 
-        knowledgeBase.put("ANGULAR_21_UPGRADE",
-                "【前端 Angular 21 規範】：\n" +
-                        "1. 必須使用 Standalone Components，不允許再宣告 NgModule。\n" +
-                        "2. 所有的 API 呼叫必須透過自製的 BankHttpInterceptor。\n" +
-                        "3. Playwright 測試中，定位元素請優先使用 page.getByTestId()，禁止使用 CSS class 定位。");
+        knowledgeBase.put("ANGULAR_21_UPGRADE", """
+                【前端 Angular 21 規範】：
+                1. 必須使用 Standalone Components，不允許再宣告 NgModule。
+                2. 所有的 API 呼叫必須透過自製的 BankHttpInterceptor。
+                3. Playwright 測試中，定位元素請優先使用 page.getByTestId()，禁止使用 CSS class 定位。""");
 
-        knowledgeBase.put("JUNIT_TESTING",
-                "【單元測試規範】：\n" +
-                        "1. JUnit 5 測試類別名稱必須以 Test 結尾。\n" +
-                        "2. 必須使用 Mockito.mock() 隔離外部依賴，禁止在單元測試連線真實資料庫。");
+        knowledgeBase.put("JUNIT_TESTING", """
+                【單元測試規範】：
+                1. JUnit 5 測試類別名稱必須以 Test 結尾。
+                2. 必須使用 Mockito.mock() 隔離外部依賴，禁止在單元測試連線真實資料庫。""");
     }
 
     /**
