@@ -56,13 +56,18 @@ public class LlmStreamService {
             String astAnalysisResult =  javaAstService.analyzeStructure(codeContext);
 
             // 3. 升級 System Prompt，迫使 AI 必須對齊後端分析出來的骨架
-            String systemPrompt = "你是一位精通 Java 8 與自動化測試的頂尖架構師。\n" +
-                    "後端系統已經為你解析了該檔案的精確 AST 結構如下：\n" +
-                    astAnalysisResult + "\n" +
-                    "請嚴格根據上方分析出的公開方法與異常聲明，為使用者規劃完整的 JUnit 5 測試案例。" +
-                    "請使用專業的繁體中文回答。";
+            String systemPrompt = """
+                    你是一位精通 Java 8 與自動化測試的頂尖架構師。
+                    後端系統已經為你解析了該檔案的精確 AST 結構如下：
+                    %s
+                    請嚴格根據上方分析出的公開方法與異常聲明，為使用者規劃完整的 JUnit 5 測試案例。請使用專業的繁體中文回答。"""
+                    .formatted(astAnalysisResult);
 
-            String userMessage = "使用者具體提問：" + userQuery + "\n\n原始碼全文：\n" + codeContext;
+            String userMessage = """
+                    使用者具體提問：%s
+
+                    原始碼全文：
+                    %s""".formatted(userQuery, codeContext);
 
             // 2. 構建 JSON Payload
             ObjectNode payload = objectMapper.createObjectNode();

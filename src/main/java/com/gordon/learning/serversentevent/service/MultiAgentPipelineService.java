@@ -41,7 +41,9 @@ public class MultiAgentPipelineService {
 
             // 1. 第一棒：Security Agent (專注於找漏洞，不寫測試)
             emitter.send(SseEmitter.event().name("progress").data("資安 Agent 正在進行漏洞掃描..."));
-            String securityPrompt = "你是一位金融業資安專家。請根據以下公司規範檢查程式碼，是否有 SQL Injection 或權限控管漏洞？若有，請指出。若無，請回答「安全」。\n內部規範：" + companyGuidelines;
+            String securityPrompt = """
+                    你是一位金融業資安專家。請根據以下公司規範檢查程式碼，是否有 SQL Injection 或權限控管漏洞？若有，請指出。若無，請回答「安全」。
+                    內部規範：%s""".formatted(companyGuidelines);
 
             // 這裡必須「同步」等待資安專家的檢查結果
             String securityReport = llmClient.callLlmSync(securityPrompt, codeContext); // 這裡是同步等待結果
@@ -69,13 +71,19 @@ public class MultiAgentPipelineService {
             emitter.send(SseEmitter.event().name("progress").data("✅ 資安審查通過。QA Agent 正在設計測試案例..."));
 
             // 1. 第二棒：QA Agent (拿著資安報告、AST 與 RAG 規範來寫扣)
-            String qaPrompt =
-                    "你是一位頂尖的自動化測試架構師。此程式碼已通過資安審查。\n" +
-                            "請根據使用者的需求、企業內部規範，以及系統解析出的 AST 結構，撰寫最嚴謹的測試程式碼 (優先使用 JUnit 5 或 Playwright)。\n" +
-                            "請直接給出包含 Markdown 標記 (如 ```java) 的完整測試程式碼，不要有過多的廢話。\n\n" +
-                            "【使用者需求】\n" + userQuery + "\n\n" +
-                            "【AST 語法樹結構】\n" + astContext + "\n\n" +
-                            "【公司內部規範】\n" + companyGuidelines;
+            String qaPrompt = """
+                    你是一位頂尖的自動化測試架構師。此程式碼已通過資安審查。
+                    請根據使用者的需求、企業內部規範，以及系統解析出的 AST 結構，撰寫最嚴謹的測試程式碼 (優先使用 JUnit 5 或 Playwright)。
+                    請直接給出包含 Markdown 標記 (如 ```java) 的完整測試程式碼，不要有過多的廢話。
+
+                    【使用者需求】
+                    %s
+
+                    【AST 語法樹結構】
+                    %s
+
+                    【公司內部規範】
+                    %s""".formatted(userQuery, astContext, companyGuidelines);
 
             // 2. 呼叫串流 API，把 QA 寫出來的程式碼「即時打字」傳回 VS Code
             llmClient.callLlmStreamAndExtractAction(qaPrompt, codeContext, emitter);
