@@ -17,6 +17,8 @@ public class MultiAgentPipelineService {
 
     @Autowired
     private JavaAstService astService;
+    @Autowired
+    private AgentMetricsService agentMetricsService;
 
     public void executePipeline(String userQuery, String codeContext, SseEmitter emitter) throws IOException {
 
@@ -45,7 +47,11 @@ public class MultiAgentPipelineService {
             String securityReport = llmClient.callLlmSync(securityPrompt, codeContext); // 這裡是同步等待結果
 
             // 攔截機制：如果資安專家沒有給出「【安全】」的綠燈，直接退回，中斷管線
-            if (!securityReport.contains("安全")) {
+            if (!securityReport.contains("【安全】")) {
+
+                // 紀錄一次成功的資安攔截！
+                agentMetricsService.recordSecurityIntercept();
+
                 String warningMessage = "⚠️ **Security Agent 阻擋了此次提交**：\n\n" + securityReport;
                 emitter.send(SseEmitter.event().name("progress").data(warningMessage));
 
@@ -73,6 +79,10 @@ public class MultiAgentPipelineService {
 
             // 2. 呼叫串流 API，把 QA 寫出來的程式碼「即時打字」傳回 VS Code
             llmClient.callLlmStreamAndExtractAction(qaPrompt, codeContext, emitter);
+
+            // 管線順利走完，紀錄一次成功產出
+            agentMetricsService.recordPipelineSuccess();
+
         } catch (IOException e) {
             try {
                 emitter.send(SseEmitter.event().name("message").data("\\n\\n❌ 系統管線執行失敗：" + e.getMessage()));

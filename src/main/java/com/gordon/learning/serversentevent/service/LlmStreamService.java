@@ -37,6 +37,9 @@ public class LlmStreamService {
     @Autowired
     private JavaAstService javaAstService;
 
+    @Autowired
+    private AgentMetricsService agentMetricsService;
+
     public LlmStreamService() {
         this.client = new OkHttpClient.Builder()
                 .readTimeout(3, TimeUnit.MINUTES) // LLM 思考時間較長，拉長 Timeout
@@ -191,6 +194,7 @@ public class LlmStreamService {
      * 阻斷執行緒，直到 LLM 完整回覆為止。
      */
     public String callLlmSync(String systemPrompt, String codeContext) throws IOException {
+
         ObjectNode payload = objectMapper.createObjectNode();
         payload.put("model", modelName);
         payload.put("stream", false); // 關閉串流
@@ -213,6 +217,14 @@ public class LlmStreamService {
             }
             // 解析回傳的整包 JSON
             JsonNode rootNode = objectMapper.readTree(response.body().string());
+
+            // 提取Token使用量並記錄到micrometer
+            JsonNode usageNode = rootNode.path("usage");
+            if (!usageNode.isMissingNode()) {
+                int totalTokens = usageNode.path("total_tokens").asInt();
+                agentMetricsService.recordTokensUsed(totalTokens);
+            }
+
             return rootNode.path("choices").get(0).path("message").path("content").asString();
         }
     }
